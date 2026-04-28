@@ -1,0 +1,23 @@
+body {
+    font-size: 1.25rem;
+}
+
+.avatar {
+    max-width: 100%;
+}
+
+.comment-avatar {
+    width: 48px;
+    height: 48px;
+    object-fit: cover;
+}
+
+.comment-card {
+    background: #fff;
+    border: 1px solid rgba(0, 0, 0, 0.125);
+    border-radius: 0.25rem;
+}
+
+.post-text {
+    white-space: pre-wrap;
+}
