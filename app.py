@@ -1,101 +1,68 @@
-from __future__ import annotations
+import random
+from flask import Flask, abort, render_template
+from faker import Faker
 
-import re
-
-from flask import Flask, make_response, redirect, render_template, request, url_for
+fake = Faker()
 
 app = Flask(__name__)
-app.config["SECRET_KEY"] = "dev"
+application = app
 
+app.config.setdefault('STUDENT_NAME', 'Полончиков Сергей Андреевич')
+app.config.setdefault('STUDENT_GROUP', 'Группа 241-3211')
 
-ALLOWED_PHONE_CHARS_RE = re.compile(r"^[0-9\s().+\-]*$")
+images_ids = ['7d4e9175-95ea-4c5f-8be5-92a6b708bb3c',
+              '2d2ab7df-cdbc-48a8-a936-35bba702def5',
+              '6e12f3de-d5fd-4ebb-855b-8cbc485278b7',
+              'afc2cfe7-5cac-4b80-9b9a-d5c65ef0c728',
+              'cab5b7f2-774e-4884-a200-0c0180fa777f']
 
+def generate_comments(replies=True):
+    comments = []
+    for i in range(random.randint(1, 3)):
+        comment = { 'author': fake.name(), 'text': fake.text() }
+        if replies:
+            comment['replies'] = generate_comments(replies=False)
+        comments.append(comment)
+    return comments
 
-def validate_phone(phone_raw: str) -> tuple[bool, str | None, str]:
-    phone = (phone_raw or "").strip()
+def generate_post(i):
+    return {
+        'title': 'Заголовок поста',
+        'text': fake.paragraph(nb_sentences=100),
+        'author': fake.name(),
+        'date': fake.date_time_between(start_date='-2y', end_date='now'),
+        'image_id': f'{images_ids[i]}.jpg',
+        'comments': generate_comments()
+    }
 
-    if not ALLOWED_PHONE_CHARS_RE.fullmatch(phone):
-        return (
-            False,
-            "Недопустимый ввод. В номере телефона встречаются недопустимые символы.",
-            phone,
-        )
+posts_list = sorted([generate_post(i) for i in range(5)], key=lambda p: p['date'], reverse=True)
 
-    digits = re.sub(r"\D", "", phone)
+@app.context_processor
+def inject_base_context():
+    return {
+        'student_name': app.config['STUDENT_NAME'],
+        'student_group': app.config['STUDENT_GROUP'],
+    }
 
-    # "номер должен содержать 11 цифр если он начинается с «+7» или «8»,
-    # в остальных случаях – 10 цифр"
-    requires_11 = phone.startswith("+7") or phone.startswith("8")
-    expected_len = 11 if requires_11 else 10
-    if len(digits) != expected_len:
-        return (
-            False,
-            "Недопустимый ввод. Неверное количество цифр.",
-            phone,
-        )
-
-    return True, None, digits
-
-
-@app.get("/")
+@app.route('/')
 def index():
-    return render_template("index.html")
+    return render_template('index.html')
+
+@app.route('/posts')
+def posts():
+    return render_template('posts.html', title='Посты', posts=posts_list)
+
+@app.route('/posts/<int:index>')
+def post(index):
+    if index < 0 or index >= len(posts_list):
+        abort(404)
+    p = posts_list[index]
+    return render_template('post.html', title=p['title'], post=p)
+
+@app.route('/about')
+def about():
+    return render_template('about.html', title='Об авторе')
 
 
-@app.get("/request")
-def request_info():
-    resp = make_response(
-        render_template(
-            "request.html",
-            url_args=dict(request.args),
-            headers=dict(request.headers),
-            cookies=request.cookies,
-        )
-    )
-    # Demo cookie so the "cookies" section is never empty on first visit.
-    if "demo_cookie" not in request.cookies:
-        resp.set_cookie("demo_cookie", "hello")
-    return resp
-
-
-@app.route("/login", methods=["GET", "POST"])
-def login():
-    submitted = None
-    if request.method == "POST":
-        submitted = {
-            "username": request.form.get("username", ""),
-            "password": request.form.get("password", ""),
-        }
-    return render_template("login.html", submitted=submitted, form_data=request.form)
-
-
-@app.route("/phone", methods=["GET", "POST"])
-def phone():
-    value = ""
-    is_valid = True
-    error = None
-    normalized = None
-
-    if request.method == "POST":
-        value = request.form.get("phone", "")
-        is_valid, error, normalized = validate_phone(value)
-
-    return render_template(
-        "phone.html",
-        value=value,
-        is_valid=is_valid,
-        error=error,
-        normalized=normalized,
-    )
-
-
-@app.get("/set-cookie")
-def set_cookie():
-    resp = make_response(redirect(url_for("request_info")))
-    resp.set_cookie("my_cookie", "value")
-    return resp
-
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     app.run(debug=True)
-
